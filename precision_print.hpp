@@ -3,19 +3,19 @@
 
 namespace prprint {
 
-enum class Rounding {
+enum class Rounding : unsigned char {
     keep,
     up,
     down
 };
 
 struct PrPrint {
-    explicit PrPrint(unsigned precision, bool trimZeros = true, Rounding mode = Rounding::keep)
+    explicit PrPrint(unsigned short precision, bool trimZeros = true, Rounding mode = Rounding::keep)
         : precision_(precision),
           trimZeros_(trimZeros),
           mode_(mode) {}
 
-    unsigned precision_;
+    unsigned short precision_;
     bool trimZeros_;
     Rounding mode_;
 };
