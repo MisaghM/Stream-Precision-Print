@@ -1,4 +1,6 @@
+#include <cstdio>
 #include <ostream>
+#include <string>
 #include <type_traits>
 
 namespace prprint {
@@ -29,7 +31,22 @@ namespace detail {
 
     template <class Char, class CharT, class T>
     inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
-        os << num;
+        if (p.trimZeros_) {
+            auto len = std::snprintf(nullptr, 0, "%.*f", p.precision_, num);
+            std::string s(len + 1, 0);
+            std::snprintf(&s[0], len + 1, "%.*f", p.precision_, num);
+            s.pop_back();
+            s.erase(s.find_last_not_of('0') + 1, std::string::npos);
+            if (s.back() == '.') s.pop_back();
+            os << s;
+        }
+        else {
+            auto prevPrecision = os.precision(p.precision_);
+            auto prevFmtflags = os.setf(std::ios_base::fixed, std::ios_base::floatfield);
+            os << num;
+            os.flags(prevFmtflags);
+            os.precision(prevPrecision);
+        }
     }
 
     template <class Char, class CharT>
