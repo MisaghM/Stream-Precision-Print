@@ -1,5 +1,7 @@
 #include <cstdio>
+#include <cwchar>
 #include <ostream>
+#include <sstream>
 #include <string>
 #include <type_traits>
 
@@ -24,30 +26,62 @@ struct PrPrint {
 
 namespace detail {
 
+    template <bool>
+    struct TrimZerosTag {};
+
+    template <class Char, class CharT, class T>
+    inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num, TrimZerosTag<false>) {
+        auto prevPrecision = os.precision(p.precision_);
+        auto prevFmtflags = os.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        os << num;
+        os.flags(prevFmtflags);
+        os.precision(prevPrecision);
+    }
+
+    template <class Char, class CharT, class T>
+    inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num, TrimZerosTag<true>) {
+        std::basic_ostringstream<Char, CharT> sstr;
+        sstr.precision(p.precision_);
+        sstr.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        sstr << num;
+        std::basic_string<Char, CharT> s(sstr.str());
+        s.erase(s.find_last_not_of(static_cast<Char>('0')) + 1, std::basic_string<Char, CharT>::npos);
+        if (s.back() == static_cast<Char>('.')) s.pop_back();
+        os << s;
+    }
+
+    template <class T>
+    inline void printer(std::ostream& os, PrPrint p, T num, TrimZerosTag<true>) {
+        auto len = std::snprintf(nullptr, 0, "%.*f", p.precision_, num);
+        std::string s(len + 1, 0);
+        std::snprintf(&s[0], len + 1, "%.*f", p.precision_, num);
+        s.pop_back();
+        s.erase(s.find_last_not_of('0') + 1, std::string::npos);
+        if (s.back() == '.') s.pop_back();
+        os << s;
+    }
+
+    template <class T>
+    inline void printer(std::wostream& os, PrPrint p, T num, TrimZerosTag<true>) {
+        auto len = std::snprintf(nullptr, 0, "%.*f", p.precision_, num);
+        std::wstring s(len + 1, 0);
+        std::swprintf(&s[0], len + 1, L"%.*f", p.precision_, num);
+        s.pop_back();
+        s.erase(s.find_last_not_of(L'0') + 1, std::wstring::npos);
+        if (s.back() == L'.') s.pop_back();
+        os << s;
+    }
+
+    template <class Char, class CharT, class T>
+    inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
+        if (p.trimZeros_) printer(os, p, num, TrimZerosTag<true> {});
+        else printer(os, p, num, TrimZerosTag<false> {});
+    }
+
     template <class T>
     using enable_if_float = typename std::enable_if<std::is_floating_point<T>::value>::type;
     template <class T>
     using enable_if_not_float = typename std::enable_if<!std::is_floating_point<T>::value>::type;
-
-    template <class Char, class CharT, class T>
-    inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
-        if (p.trimZeros_) {
-            auto len = std::snprintf(nullptr, 0, "%.*f", p.precision_, num);
-            std::string s(len + 1, 0);
-            std::snprintf(&s[0], len + 1, "%.*f", p.precision_, num);
-            s.pop_back();
-            s.erase(s.find_last_not_of('0') + 1, std::string::npos);
-            if (s.back() == '.') s.pop_back();
-            os << s;
-        }
-        else {
-            auto prevPrecision = os.precision(p.precision_);
-            auto prevFmtflags = os.setf(std::ios_base::fixed, std::ios_base::floatfield);
-            os << num;
-            os.flags(prevFmtflags);
-            os.precision(prevPrecision);
-        }
-    }
 
     template <class Char, class CharT>
     class prprint_proxy {
