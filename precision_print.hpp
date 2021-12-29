@@ -14,14 +14,14 @@ enum class Rounding : unsigned char {
 };
 
 struct PrPrint {
-    explicit PrPrint(unsigned short precision, bool trimZeros = true, Rounding mode = Rounding::keep)
-        : precision_(precision),
-          trimZeros_(trimZeros),
-          mode_(mode) {}
+    explicit PrPrint(unsigned short precision_, bool trimZeros_ = false, Rounding mode_ = Rounding::keep)
+        : precision(precision_),
+          trimZeros(trimZeros_),
+          mode(mode_) {}
 
-    unsigned short precision_;
-    bool trimZeros_;
-    Rounding mode_;
+    unsigned short precision;
+    bool trimZeros;
+    Rounding mode;
 };
 
 namespace detail {
@@ -31,8 +31,8 @@ namespace detail {
 
     template <class Char, class CharT, class T>
     inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num, TrimZerosTag<false>) {
-        auto prevPrecision = os.precision(p.precision_);
-        auto prevFmtflags = os.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        const auto prevPrecision = os.precision(p.precision);
+        const auto prevFmtflags = os.setf(std::ios_base::fixed, std::ios_base::floatfield);
         os << num;
         os.flags(prevFmtflags);
         os.precision(prevPrecision);
@@ -41,7 +41,7 @@ namespace detail {
     template <class Char, class CharT, class T>
     inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num, TrimZerosTag<true>) {
         std::basic_ostringstream<Char, CharT> sstr;
-        sstr.precision(p.precision_);
+        sstr.precision(p.precision);
         sstr.setf(std::ios_base::fixed, std::ios_base::floatfield);
         sstr << num;
         std::basic_string<Char, CharT> s(sstr.str());
@@ -52,9 +52,9 @@ namespace detail {
 
     template <class T>
     inline void printer(std::ostream& os, PrPrint p, T num, TrimZerosTag<true>) {
-        auto len = std::snprintf(nullptr, 0, "%.*f", p.precision_, num);
+        const int len = std::snprintf(nullptr, 0, "%.*f", p.precision, num);
         std::string s(len + 1, 0);
-        std::snprintf(&s[0], len + 1, "%.*f", p.precision_, num);
+        std::snprintf(&s[0], len + 1, "%.*f", p.precision, num);
         s.pop_back();
         s.erase(s.find_last_not_of('0') + 1, std::string::npos);
         if (s.back() == '.') s.pop_back();
@@ -63,9 +63,9 @@ namespace detail {
 
     template <class T>
     inline void printer(std::wostream& os, PrPrint p, T num, TrimZerosTag<true>) {
-        auto len = std::snprintf(nullptr, 0, "%.*f", p.precision_, num);
+        const int len = std::snprintf(nullptr, 0, "%.*f", p.precision, num);
         std::wstring s(len + 1, 0);
-        std::swprintf(&s[0], len + 1, L"%.*f", p.precision_, num);
+        std::swprintf(&s[0], len + 1, L"%.*f", p.precision, num);
         s.pop_back();
         s.erase(s.find_last_not_of(L'0') + 1, std::wstring::npos);
         if (s.back() == L'.') s.pop_back();
@@ -74,7 +74,7 @@ namespace detail {
 
     template <class Char, class CharT, class T>
     inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
-        if (p.trimZeros_) printer(os, p, num, TrimZerosTag<true> {});
+        if (p.trimZeros) printer(os, p, num, TrimZerosTag<true> {});
         else printer(os, p, num, TrimZerosTag<false> {});
     }
 
