@@ -1,3 +1,6 @@
+#ifndef PRECISION_PRINT_HPP_INCLUDE
+#define PRECISION_PRINT_HPP_INCLUDE
+
 #include <cstdio>
 #include <cwchar>
 #include <ostream>
@@ -86,9 +89,9 @@ namespace detail {
     template <class Char, class CharT>
     class prprint_proxy {
     public:
-        using OSType = std::basic_ostream<Char, CharT>;
+        using ostream_type = std::basic_ostream<Char, CharT>;
 
-        prprint_proxy(OSType& os, PrPrint p)
+        prprint_proxy(ostream_type& os, PrPrint p)
             : os_(os),
               p_(p) {}
 
@@ -96,6 +99,11 @@ namespace detail {
                   class = enable_if_not_float<Rhs>>
         prprint_proxy& operator<<(const Rhs& rhs) {
             os_ << rhs;
+            return *this;
+        }
+
+        prprint_proxy& operator<<(PrPrint rhs) {
+            p_ = rhs;
             return *this;
         }
 
@@ -107,7 +115,7 @@ namespace detail {
         }
 
     private:
-        OSType& os_;
+        ostream_type& os_;
         PrPrint p_;
     };
 
@@ -115,7 +123,7 @@ namespace detail {
 
 template <class Char, class CharT, class T,
           class = detail::enable_if_float<T>>
-inline void PrecisionPrint(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
+inline void print(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
     detail::printer(os, p, num);
 }
 
@@ -126,3 +134,5 @@ operator<<(std::basic_ostream<Char, CharT>& os, PrPrint p) {
 }
 
 } // namespace prprint
+
+#endif // PRECISION_PRINT_HPP_INCLUDE
