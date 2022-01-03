@@ -1,6 +1,7 @@
 #ifndef PRECISION_PRINT_HPP_INCLUDE
 #define PRECISION_PRINT_HPP_INCLUDE
 
+#include <cmath>
 #include <cstdio>
 #include <cwchar>
 #include <ostream>
@@ -12,19 +13,21 @@ namespace prprint {
 
 enum class Rounding : unsigned char {
     keep,
-    up,
-    down
+    upward,
+    downward,
+    toNearest,
+    towardZero
 };
 
 struct PrPrint {
-    explicit PrPrint(unsigned short precision_, bool trimZeros_ = false, Rounding mode_ = Rounding::keep)
+    explicit PrPrint(unsigned short precision_, bool trimZeros_ = false, Rounding roundMode_ = Rounding::keep)
         : precision(precision_),
           trimZeros(trimZeros_),
-          mode(mode_) {}
+          roundMode(roundMode_) {}
 
     unsigned short precision;
     bool trimZeros;
-    Rounding mode;
+    Rounding roundMode;
 };
 
 namespace detail {
@@ -77,6 +80,23 @@ namespace detail {
 
     template <class Char, class CharT, class T>
     inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
+        const auto tenPowP = std::pow(10.0, p.precision);
+        switch (p.roundMode) {
+        case Rounding::keep:
+            break;
+        case Rounding::upward:
+            num = std::ceil(num * tenPowP) / tenPowP;
+            break;
+        case Rounding::downward:
+            num = std::floor(num * tenPowP) / tenPowP;
+            break;
+        case Rounding::toNearest:
+            num = std::round(num * tenPowP) / tenPowP;
+            break;
+        case Rounding::towardZero:
+            num = std::trunc(num * tenPowP) / tenPowP;
+            break;
+        }
         if (p.trimZeros) printer(os, p, num, TrimZerosTag<true> {});
         else printer(os, p, num, TrimZerosTag<false> {});
     }
