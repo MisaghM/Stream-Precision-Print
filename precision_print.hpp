@@ -35,8 +35,8 @@ namespace detail {
     template <bool>
     struct TrimZerosTag {};
 
-    template <class Char, class CharT, class T>
-    inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num, TrimZerosTag<false>) {
+    template <class CharT, class Traits, class T>
+    inline void printer(std::basic_ostream<CharT, Traits>& os, PrPrint p, T num, TrimZerosTag<false>) {
         const auto prevPrecision = os.precision(p.precision);
         const auto prevFmtflags = os.setf(std::ios_base::fixed, std::ios_base::floatfield);
         os << num;
@@ -44,15 +44,15 @@ namespace detail {
         os.precision(prevPrecision);
     }
 
-    template <class Char, class CharT, class T>
-    inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num, TrimZerosTag<true>) {
-        std::basic_ostringstream<Char, CharT> sstr;
+    template <class CharT, class Traits, class T>
+    inline void printer(std::basic_ostream<CharT, Traits>& os, PrPrint p, T num, TrimZerosTag<true>) {
+        std::basic_ostringstream<CharT, Traits> sstr;
         sstr.precision(p.precision);
         sstr.setf(std::ios_base::fixed, std::ios_base::floatfield);
         sstr << num;
-        std::basic_string<Char, CharT> s(sstr.str());
-        s.erase(s.find_last_not_of(static_cast<Char>('0')) + 1, std::basic_string<Char, CharT>::npos);
-        if (s.back() == static_cast<Char>('.')) s.pop_back();
+        std::basic_string<CharT, Traits> s(sstr.str());
+        s.erase(s.find_last_not_of(static_cast<CharT>('0')) + 1, std::basic_string<CharT, Traits>::npos);
+        if (s.back() == static_cast<CharT>('.')) s.pop_back();
         os << s;
     }
 
@@ -78,8 +78,8 @@ namespace detail {
         os << s;
     }
 
-    template <class Char, class CharT, class T>
-    inline void printer(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
+    template <class CharT, class Traits, class T>
+    inline void printer(std::basic_ostream<CharT, Traits>& os, PrPrint p, T num) {
         const auto tenPowP = std::pow(10.0, p.precision);
         switch (p.roundMode) {
         case Rounding::keep:
@@ -106,10 +106,10 @@ namespace detail {
     template <class T>
     using enable_if_not_float = typename std::enable_if<!std::is_floating_point<T>::value>::type;
 
-    template <class Char, class CharT>
+    template <class CharT, class Traits>
     class prprint_proxy {
     public:
-        using ostream_type = std::basic_ostream<Char, CharT>;
+        using ostream_type = std::basic_ostream<CharT, Traits>;
 
         prprint_proxy(ostream_type& os, PrPrint p)
             : os_(os),
@@ -141,16 +141,16 @@ namespace detail {
 
 } // namespace detail
 
-template <class Char, class CharT, class T,
+template <class CharT, class Traits, class T,
           class = detail::enable_if_float<T>>
-inline void print(std::basic_ostream<Char, CharT>& os, PrPrint p, T num) {
+inline void print(std::basic_ostream<CharT, Traits>& os, PrPrint p, T num) {
     detail::printer(os, p, num);
 }
 
-template <class Char, class CharT>
-inline detail::prprint_proxy<Char, CharT>
-operator<<(std::basic_ostream<Char, CharT>& os, PrPrint p) {
-    return detail::prprint_proxy<Char, CharT>(os, p);
+template <class CharT, class Traits>
+inline detail::prprint_proxy<CharT, Traits>
+operator<<(std::basic_ostream<CharT, Traits>& os, PrPrint p) {
+    return detail::prprint_proxy<CharT, Traits>(os, p);
 }
 
 } // namespace prprint
