@@ -35,11 +35,13 @@ namespace detail {
     template <bool>
     struct TrimZerosTag {};
 
+    using iosb = std::ios_base;
+
     template <class CharT, class Traits, class T>
     inline void printer(std::basic_ostream<CharT, Traits>& os, PrPrint p, T num, TrimZerosTag<false>) {
         const auto prevPrecision = os.precision(p.precision);
-        const auto prevFmtflags = os.setf(std::ios_base::fixed, std::ios_base::floatfield);
-        os.unsetf(std::ios_base::adjustfield);
+        const auto prevFmtflags = os.setf(iosb::fixed, iosb::floatfield);
+        os.unsetf(iosb::adjustfield);
         os << num;
         os.flags(prevFmtflags);
         os.precision(prevPrecision);
@@ -50,24 +52,36 @@ namespace detail {
         const auto osFlags = os.flags();
         std::basic_ostringstream<CharT, Traits> sstr;
         sstr.precision(p.precision);
-        sstr.flags(std::ios_base::fixed | (osFlags & (std::ios_base::showpos | std::ios_base::showpoint)));
+        sstr.flags(iosb::fixed | (osFlags & (iosb::showpos | iosb::showpoint | iosb::uppercase)));
 
         sstr << num;
         std::basic_string<CharT, Traits> s(sstr.str());
 
         if (p.precision != 0u) {
             s.erase(s.find_last_not_of(static_cast<CharT>('0')) + 1, std::basic_string<CharT, Traits>::npos);
-            if (s.back() == static_cast<CharT>('.') && !(osFlags & std::ios_base::showpoint)) s.pop_back();
+            if (s.back() == static_cast<CharT>('.') && !(osFlags & iosb::showpoint)) s.pop_back();
         }
         os << s;
+    }
+
+    inline void printfFmtFloat(char* fPtr, const iosb::fmtflags osFlags) {
+        *fPtr = '%';
+        if (osFlags & iosb::showpos) *++fPtr = '+';
+        if (osFlags & iosb::showpoint) *++fPtr = '#';
+        *++fPtr = '.';
+        *++fPtr = '*';
+        if (osFlags & iosb::uppercase) *++fPtr = 'F';
+        else *++fPtr = 'f';
+        *++fPtr = '\0';
     }
 
     template <class T>
     inline void printer(std::ostream& os, PrPrint p, T num, TrimZerosTag<true>) {
         const auto osFlags = os.flags();
-        const auto showPoint = osFlags & std::ios_base::showpoint;
 
-        const char* format = (osFlags & std::ios_base::showpos) ? "%+.*f" : "%.*f";
+        char format[8];
+        printfFmtFloat(format, osFlags);
+
         const int len = std::snprintf(nullptr, 0, format, p.precision, num);
         std::string s(len + 1, 0);
         std::snprintf(&s[0], len + 1, format, p.precision, num);
@@ -75,27 +89,22 @@ namespace detail {
 
         if (p.precision != 0u) {
             s.erase(s.find_last_not_of('0') + 1, std::string::npos);
-            if (s.back() == '.' && !showPoint) s.pop_back();
+            if (s.back() == '.' && !(osFlags & iosb::showpoint)) s.pop_back();
         }
-        else if (showPoint) s.push_back('.');
         os << s;
     }
 
     template <class T>
     inline void printer(std::wostream& os, PrPrint p, T num, TrimZerosTag<true>) {
         const auto osFlags = os.flags();
-        const auto showPoint = osFlags & std::ios_base::showpoint;
 
-        const char* format;
-        const wchar_t* wformat;
-        if (osFlags & std::ios_base::showpos) {
-            format = "%+.*f";
-            wformat = L"%+.*f";
-        }
-        else {
-            format = "%.*f";
-            wformat = L"%.*f";
-        }
+        char format[8];
+        printfFmtFloat(format, osFlags);
+
+        wchar_t wformat[8];
+        const char* fPtrBegin = format;
+        std::mbstate_t mbstate;
+        std::mbsrtowcs(wformat, &fPtrBegin, 8, &mbstate);
 
         const int len = std::snprintf(nullptr, 0, format, p.precision, num);
         std::wstring s(len + 1, 0);
@@ -104,9 +113,8 @@ namespace detail {
 
         if (p.precision != 0u) {
             s.erase(s.find_last_not_of(L'0') + 1, std::wstring::npos);
-            if (s.back() == L'.' && !showPoint) s.pop_back();
+            if (s.back() == L'.' && !(osFlags & iosb::showpoint)) s.pop_back();
         }
-        else if (showPoint) s.push_back(L'.');
         os << s;
     }
 
