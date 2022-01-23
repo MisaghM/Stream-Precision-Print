@@ -1,9 +1,11 @@
 #ifndef PRECISION_PRINT_HPP_INCLUDE
 #define PRECISION_PRINT_HPP_INCLUDE
 
+#include <clocale>
 #include <cmath>
 #include <cstdio>
 #include <cwchar>
+#include <locale>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -50,16 +52,20 @@ namespace detail {
     template <class CharT, class Traits, class T>
     inline void printer(std::basic_ostream<CharT, Traits>& os, PrPrint p, T num, TrimZerosTag<true>) {
         const auto osFlags = os.flags();
+        const std::locale loc(os.getloc());
+
         std::basic_ostringstream<CharT, Traits> sstr;
         sstr.precision(p.precision);
         sstr.flags(iosb::fixed | (osFlags & (iosb::showpos | iosb::showpoint | iosb::uppercase)));
+        sstr.imbue(loc);
 
         sstr << num;
         std::basic_string<CharT, Traits> s(sstr.str());
 
         if (p.precision != 0u) {
-            s.erase(s.find_last_not_of(static_cast<CharT>('0')) + 1, std::basic_string<CharT, Traits>::npos);
-            if (s.back() == static_cast<CharT>('.') && !(osFlags & iosb::showpoint)) s.pop_back();
+            s.erase(s.find_last_not_of(static_cast<CharT>('0')) + 1);
+            if (s.back() == std::use_facet<std::numpunct<CharT>>(loc).decimal_point() &&
+                !(osFlags & iosb::showpoint)) s.pop_back();
         }
         os << s;
     }
@@ -75,28 +81,96 @@ namespace detail {
         *++fPtr = '\0';
     }
 
+    template <class CharT, class Traits>
+    inline std::basic_string<CharT, Traits>
+    applyLocaleFmt(const std::basic_string<CharT, Traits>& s,
+                   const std::locale& loc,
+                   const CharT decimalPoint) {
+        constexpr auto bstring_npos = std::basic_string<CharT, Traits>::npos;
+        const auto& numPunct = std::use_facet<std::numpunct<CharT>>(loc);
+        const CharT sep = numPunct.thousands_sep();
+        const CharT point = numPunct.decimal_point();
+        const std::string grouping(numPunct.grouping());
+        const auto pointPos = s.find(decimalPoint);
+
+        if (grouping.empty()) {
+            std::basic_string<CharT, Traits> result(s);
+            if (pointPos != bstring_npos) {
+                result[pointPos] = point;
+            }
+            return result;
+        }
+
+        unsigned sepsTotal = 0;
+        auto digits = (pointPos != bstring_npos) ? pointPos : s.size();
+        std::string::const_iterator gItr(grouping.begin());
+        while (digits > static_cast<std::size_t>(*gItr)) {
+            digits -= static_cast<std::size_t>(*gItr);
+            ++sepsTotal;
+            if (gItr != --grouping.end()) ++gItr;
+        }
+
+        std::basic_string<CharT, Traits> result(s.size() + sepsTotal, static_cast<CharT>(0));
+        typename std::basic_string<CharT, Traits>::size_type last;
+        typename std::basic_string<CharT, Traits>::const_iterator sItr;
+
+        if (pointPos != bstring_npos) {
+            last = pointPos + sepsTotal;
+            if (pointPos != s.size() - 1) {
+                result.replace(last + 1, bstring_npos, s, pointPos + 1, bstring_npos);
+            }
+            result[last] = point;
+            sItr = s.begin() + pointPos;
+        }
+        else {
+            last = result.size();
+            sItr = s.end();
+        }
+
+        gItr = grouping.begin();
+        std::size_t groupCount = static_cast<std::size_t>(*gItr);
+        do {
+            result[--last] = *--sItr;
+            if (--groupCount == 0) {
+                if (last != 0) {
+                    result[--last] = sep;
+                    if (gItr != --grouping.end()) ++gItr;
+                    groupCount = static_cast<std::size_t>(*gItr);
+                }
+                else break;
+            }
+        } while (last != 0);
+
+        return result;
+    }
+
     template <class T>
     inline void printer(std::ostream& os, PrPrint p, T num, TrimZerosTag<true>) {
         const auto osFlags = os.flags();
+        const std::locale loc(os.getloc());
+        const char decimalPoint = std::localeconv()->decimal_point[0];
 
         char format[8];
         printfFmtFloat(format, osFlags);
 
-        const int len = std::snprintf(nullptr, 0, format, p.precision, num);
-        std::string s(len + 1, 0);
-        std::snprintf(&s[0], len + 1, format, p.precision, num);
+        const int len = std::snprintf(nullptr, 0, format, p.precision, num) + 1;
+        std::string s(len, 0);
+        std::snprintf(&s[0], len, format, p.precision, num);
         s.pop_back();
 
         if (p.precision != 0u) {
-            s.erase(s.find_last_not_of('0') + 1, std::string::npos);
-            if (s.back() == '.' && !(osFlags & iosb::showpoint)) s.pop_back();
+            s.erase(s.find_last_not_of('0') + 1);
+            if (s.back() == decimalPoint && !(osFlags & iosb::showpoint)) s.pop_back();
         }
-        os << s;
+
+        os << applyLocaleFmt(s, loc, decimalPoint);
     }
 
     template <class T>
     inline void printer(std::wostream& os, PrPrint p, T num, TrimZerosTag<true>) {
         const auto osFlags = os.flags();
+        const std::locale loc(os.getloc());
+        const wchar_t decimalPoint = std::btowc(std::localeconv()->decimal_point[0]);
 
         char format[8];
         printfFmtFloat(format, osFlags);
@@ -106,16 +180,17 @@ namespace detail {
         std::mbstate_t mbstate;
         std::mbsrtowcs(wformat, &fPtrBegin, 8, &mbstate);
 
-        const int len = std::snprintf(nullptr, 0, format, p.precision, num);
-        std::wstring s(len + 1, 0);
-        std::swprintf(&s[0], len + 1, wformat, p.precision, num);
+        const int len = std::snprintf(nullptr, 0, format, p.precision, num) + 1;
+        std::wstring s(len, 0);
+        std::swprintf(&s[0], len, wformat, p.precision, num);
         s.pop_back();
 
         if (p.precision != 0u) {
-            s.erase(s.find_last_not_of(L'0') + 1, std::wstring::npos);
-            if (s.back() == L'.' && !(osFlags & iosb::showpoint)) s.pop_back();
+            s.erase(s.find_last_not_of(L'0') + 1);
+            if (s.back() == decimalPoint && !(osFlags & iosb::showpoint)) s.pop_back();
         }
-        os << s;
+
+        os << applyLocaleFmt(s, loc, decimalPoint);
     }
 
     template <class CharT, class Traits, class T>
