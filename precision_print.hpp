@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 namespace prprint {
 
@@ -82,45 +83,48 @@ namespace detail {
     }
 
     template <class CharT, class Traits>
-    inline std::basic_string<CharT, Traits>
-    applyLocaleFmt(const std::basic_string<CharT, Traits>& s,
-                   const std::locale& loc,
-                   const CharT decimalPoint) {
+    inline void applyLocaleFmt(std::basic_string<CharT, Traits>& s,
+                               const std::locale& loc,
+                               const CharT decimalPoint) {
+        if (s.size() <= 1) return;
+        const auto pointPos = s.find(decimalPoint, 1);
+
         constexpr auto bstring_npos = std::basic_string<CharT, Traits>::npos;
         const auto& numPunct = std::use_facet<std::numpunct<CharT>>(loc);
         const CharT sep = numPunct.thousands_sep();
         const CharT point = numPunct.decimal_point();
         const std::string grouping(numPunct.grouping());
-        const auto pointPos = s.find(decimalPoint);
 
-        if (grouping.empty()) {
-            std::basic_string<CharT, Traits> result(s);
-            if (pointPos != bstring_npos) {
-                result[pointPos] = point;
-            }
-            return result;
+        typename std::basic_string<CharT, Traits>::size_type digits;
+        if (pointPos != bstring_npos) {
+            s[pointPos] = point;
+            digits = pointPos;
         }
+        else digits = s.size();
+
+        if (grouping.empty()) return;
+
+        if (s[0] == static_cast<CharT>('-') ||
+            s[0] == static_cast<CharT>('+')) --digits;
 
         unsigned sepsTotal = 0;
-        auto digits = (pointPos != bstring_npos) ? pointPos : s.size();
-        std::string::const_iterator gItr(grouping.begin());
+        auto gItr = grouping.begin();
+        const auto gLast = grouping.end() - 1;
         while (digits > static_cast<std::size_t>(*gItr)) {
             digits -= static_cast<std::size_t>(*gItr);
             ++sepsTotal;
-            if (gItr != --grouping.end()) ++gItr;
+            if (gItr != gLast) ++gItr;
         }
+        if (sepsTotal == 0) return;
 
         std::basic_string<CharT, Traits> result(s.size() + sepsTotal, static_cast<CharT>(0));
+
         typename std::basic_string<CharT, Traits>::size_type last;
         typename std::basic_string<CharT, Traits>::const_iterator sItr;
-
         if (pointPos != bstring_npos) {
             last = pointPos + sepsTotal;
-            if (pointPos != s.size() - 1) {
-                result.replace(last + 1, bstring_npos, s, pointPos + 1, bstring_npos);
-            }
-            result[last] = point;
             sItr = s.begin() + pointPos;
+            result.replace(last, bstring_npos, s, pointPos, bstring_npos);
         }
         else {
             last = result.size();
@@ -128,20 +132,19 @@ namespace detail {
         }
 
         gItr = grouping.begin();
-        std::size_t groupCount = static_cast<std::size_t>(*gItr);
+        auto groupCount = static_cast<std::size_t>(*gItr);
         do {
             result[--last] = *--sItr;
             if (--groupCount == 0) {
-                if (last != 0) {
-                    result[--last] = sep;
-                    if (gItr != --grouping.end()) ++gItr;
-                    groupCount = static_cast<std::size_t>(*gItr);
-                }
-                else break;
+                if (last <= 1) break;
+                result[--last] = sep;
+                if (gItr != gLast) ++gItr;
+                groupCount = static_cast<std::size_t>(*gItr);
             }
-        } while (last != 0);
+        } while (last > 1);
+        result[--last] = *--sItr;
 
-        return result;
+        s = std::move(result);
     }
 
     template <class T>
@@ -163,7 +166,8 @@ namespace detail {
             if (s.back() == decimalPoint && !(osFlags & iosb::showpoint)) s.pop_back();
         }
 
-        os << applyLocaleFmt(s, loc, decimalPoint);
+        applyLocaleFmt(s, loc, decimalPoint);
+        os << s;
     }
 
     template <class T>
@@ -190,7 +194,8 @@ namespace detail {
             if (s.back() == decimalPoint && !(osFlags & iosb::showpoint)) s.pop_back();
         }
 
-        os << applyLocaleFmt(s, loc, decimalPoint);
+        applyLocaleFmt(s, loc, decimalPoint);
+        os << s;
     }
 
     template <class CharT, class Traits, class T>
