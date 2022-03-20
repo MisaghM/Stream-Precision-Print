@@ -1,6 +1,10 @@
 #ifndef PRECISION_PRINT_HPP_INCLUDE
 #define PRECISION_PRINT_HPP_INCLUDE
 
+#if __cplusplus >= 201703L
+#include <charconv>
+#endif
+
 #include <clocale>
 #include <cmath>
 #include <cstdio>
@@ -71,17 +75,6 @@ namespace detail {
         os << s;
     }
 
-    inline void printfFmtFloat(char* fPtr, const iosb::fmtflags osFlags) {
-        *fPtr = '%';
-        if (osFlags & iosb::showpos) *++fPtr = '+';
-        if (osFlags & iosb::showpoint) *++fPtr = '#';
-        *++fPtr = '.';
-        *++fPtr = '*';
-        if (osFlags & iosb::uppercase) *++fPtr = 'F';
-        else *++fPtr = 'f';
-        *++fPtr = '\0';
-    }
-
     template <class CharT, class Traits>
     inline void applyLocaleFmt(std::basic_string<CharT, Traits>& s,
                                const std::locale& loc,
@@ -147,25 +140,69 @@ namespace detail {
         s = std::move(result);
     }
 
+#if __cplusplus >= 201703L
+    template <class T>
+    std::string toChars(T num, unsigned precision, const iosb::fmtflags osFlags) {
+        const int len = std::snprintf(nullptr, 0, "%+#.*f", precision, num);
+        std::string s(len, 0);
+
+        std::size_t first;
+        if ((osFlags & iosb::showpos) && !std::signbit(num)) {
+            s[0] = '+';
+            first = 1;
+        }
+        else first = 0;
+
+        auto res = std::to_chars(&s[first], &s[len], num, std::chars_format::fixed, precision);
+        s.erase(s.begin() + (res.ptr - &s[0]), s.end());
+
+        if (!std::isfinite(num)) {
+            if (osFlags & iosb::uppercase) {
+                for (std::size_t i = s.size() - 3; i < s.size(); ++i) {
+                    s[i] ^= 0x20;
+                }
+            }
+        }
+        else if ((osFlags & iosb::showpoint) && s.find('.') == std::string::npos) {
+            s.push_back('.');
+        }
+        return s;
+    }
+#else
+    inline void printfFmtFloat(char* fPtr, const iosb::fmtflags osFlags) {
+        *fPtr = '%';
+        if (osFlags & iosb::showpos) *++fPtr = '+';
+        if (osFlags & iosb::showpoint) *++fPtr = '#';
+        *++fPtr = '.';
+        *++fPtr = '*';
+        if (osFlags & iosb::uppercase) *++fPtr = 'F';
+        else *++fPtr = 'f';
+        *++fPtr = '\0';
+    }
+#endif
+
     template <class T>
     inline void printer(std::ostream& os, PrPrint p, T num, TrimZerosTag<true>) {
         const auto osFlags = os.flags();
         const std::locale loc(os.getloc());
-        const char decimalPoint = std::localeconv()->decimal_point[0];
 
+    #if __cplusplus >= 201703L
+        constexpr char decimalPoint = '.';
+        std::string s(toChars(num, p.precision, osFlags));
+    #else
+        const char decimalPoint = std::localeconv()->decimal_point[0];
         char format[8];
         printfFmtFloat(format, osFlags);
-
         const int len = std::snprintf(nullptr, 0, format, p.precision, num) + 1;
         std::string s(len, 0);
         std::snprintf(&s[0], len, format, p.precision, num);
         s.pop_back();
+    #endif
 
         if (p.precision != 0u) {
             s.erase(s.find_last_not_of('0') + 1);
             if (s.back() == decimalPoint && !(osFlags & iosb::showpoint)) s.pop_back();
         }
-
         applyLocaleFmt(s, loc, decimalPoint);
         os << s;
     }
@@ -174,26 +211,34 @@ namespace detail {
     inline void printer(std::wostream& os, PrPrint p, T num, TrimZerosTag<true>) {
         const auto osFlags = os.flags();
         const std::locale loc(os.getloc());
-        const wchar_t decimalPoint = std::btowc(std::localeconv()->decimal_point[0]);
 
+    #if __cplusplus >= 201703L
+        constexpr wchar_t decimalPoint = L'.';
+        std::string sNarrow(toChars(num, p.precision, osFlags));
+
+        std::wstring s(sNarrow.size(), 0);
+        std::mbstate_t mbstate {};
+        const char* sNarrowBegin = &sNarrow[0];
+        std::mbsrtowcs(&s[0], &sNarrowBegin, s.size(), &mbstate);
+    #else
+        const wchar_t decimalPoint = std::btowc(std::localeconv()->decimal_point[0]);
         char format[8];
         printfFmtFloat(format, osFlags);
-
         wchar_t wformat[8];
         const char* fPtrBegin = format;
-        std::mbstate_t mbstate;
+        std::mbstate_t mbstate {};
         std::mbsrtowcs(wformat, &fPtrBegin, 8, &mbstate);
 
         const int len = std::snprintf(nullptr, 0, format, p.precision, num) + 1;
         std::wstring s(len, 0);
         std::swprintf(&s[0], len, wformat, p.precision, num);
         s.pop_back();
+    #endif
 
         if (p.precision != 0u) {
             s.erase(s.find_last_not_of(L'0') + 1);
             if (s.back() == decimalPoint && !(osFlags & iosb::showpoint)) s.pop_back();
         }
-
         applyLocaleFmt(s, loc, decimalPoint);
         os << s;
     }
