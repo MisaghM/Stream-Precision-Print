@@ -19,7 +19,7 @@ std::cout << prprint::PrPrint(2) << a; // 12.34
 
 With this header-only library, you can easily **trim trailing 0s** after setting the **precision**, and also change the **rounding** mode.  
   
-(Keep in mind that the rounding methods are very simple, prone to error and should only be used for simple tasks)
+(Keep in mind that the rounding methods are very simple, error-prone and should only be used for simple tasks)
 
 ## Example Usage
 
