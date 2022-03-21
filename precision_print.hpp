@@ -1,20 +1,26 @@
 #ifndef PRECISION_PRINT_HPP_INCLUDE
 #define PRECISION_PRINT_HPP_INCLUDE
 
-#if __cplusplus >= 201703L
-#include <charconv>
-#endif
-
-#include <clocale>
 #include <cmath>
-#include <cstdio>
-#include <cwchar>
 #include <locale>
 #include <ostream>
 #include <sstream>
 #include <string>
 #include <type_traits>
+
+#ifndef PRPRINT_UNIFORM_PRINTER
+
+#include <cstdio>
+#include <cwchar>
 #include <utility>
+
+#if __cplusplus >= 201703L
+#include <charconv>
+#else
+#include <clocale>
+#endif
+
+#endif // ifndef PRPRINT_UNIFORM_PRINTER
 
 namespace prprint {
 
@@ -74,6 +80,8 @@ namespace detail {
         }
         os << s;
     }
+
+#ifndef PRPRINT_UNIFORM_PRINTER
 
     template <class CharT, class Traits>
     inline void applyLocaleFmt(std::basic_string<CharT, Traits>& s,
@@ -142,7 +150,7 @@ namespace detail {
 
 #if __cplusplus >= 201703L
     template <class T>
-    std::string toChars(T num, unsigned precision, const iosb::fmtflags osFlags) {
+    std::string toChars(T num, unsigned precision, iosb::fmtflags osFlags) {
         const int len = std::snprintf(nullptr, 0, "%+#.*f", precision, num);
         std::string s(len, 0);
 
@@ -169,7 +177,7 @@ namespace detail {
         return s;
     }
 #else
-    inline void printfFmtFloat(char* fPtr, const iosb::fmtflags osFlags) {
+    inline void printfFmtFloat(char* fPtr, iosb::fmtflags osFlags) {
         *fPtr = '%';
         if (osFlags & iosb::showpos) *++fPtr = '+';
         if (osFlags & iosb::showpoint) *++fPtr = '#';
@@ -242,6 +250,8 @@ namespace detail {
         applyLocaleFmt(s, loc, decimalPoint);
         os << s;
     }
+
+#endif // ifndef PRPRINT_UNIFORM_PRINTER
 
     template <class CharT, class Traits, class T>
     inline void printer(std::basic_ostream<CharT, Traits>& os, PrPrint p, T num) {
